@@ -3,4 +3,4 @@ Module for creating session to manage Exchange Online Shell with or without Prox
 
 # Install Module
 Copy and Paste the following command to install this package using PowerShellGet More Info
-Install-Module -Name ExchangeOnlineShell 
+ Install-Module -Name ExchangeOnlineShell 
