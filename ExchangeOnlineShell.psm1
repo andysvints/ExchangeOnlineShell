@@ -186,32 +186,65 @@ function Connect-ExchangeOnlineShell
     Process
     {
         if ($pscmdlet.ShouldProcess( "Exchange Online Management Shell")){
+            $ExchangeOnlineSessionObjectError=$false
             if($ProxyUsed){
                 Write-Verbose "Proxy Server is used: Importing Proxy Settings from IE"
                 $proxySettings = New-PSSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic
                 $global:PSSessionOption = $proxySettings;
                 Write-Verbose "Creating Session Object using $($Credential.UserName) credentials"
-                #$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $Credential -Authentication Basic -AllowRedirection -SessionOption $proxySettings -ErrorVariable ExchangeOnlineSessionObjectError
-                $PSSession=New-ExoPSSession -UserPrincipalName $($Credential.UserName) -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -PSSessionOption $proxySettings -Credential $Credential
+                
+                try{
+                    $PSSession=New-ExoPSSession -UserPrincipalName $($Credential.UserName) -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -PSSessionOption $proxySettings -Credential $Credential
+                }catch{
+                    $ExchangeOnlineSessionObjectError=$true
+                    Write-Error "Catched Exception: $($_.exception.message)"
+                }
             }else{
                 Write-Verbose "No Proxy Detected: Connecting to Exchange Online Shell Directly"
                 Write-Verbose "Creating Session Object using $($Credential.UserName) credentials"
                 
-                #$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $Credential -Authentication Basic -AllowRedirection -ErrorVariable ExchangeOnlineSessionObjectError
-                $PSSession=New-ExoPSSession -UserPrincipalName $($Credential.UserName) -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri  -Credential $Credential
+                
+                try{
+                    $PSSession=New-ExoPSSession -UserPrincipalName $($Credential.UserName) -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri  -Credential $Credential
+                }catch{
+                    $ExchangeOnlineSessionObjectError=$true
+                    Write-Error "Catched Exception: $($_.exception.message)"
+                }
             }
 
             if($ExchangeOnlineSessionObjectError){
-                Write-Verbose "Failed to create a Session Object"
-                Write-Verbose "Please double check your credentials and try again"
+                Write-Error "Failed to create a Session Object"
+                Write-Error "Please double check your credentials and try again"
             }else{
                 Write-Verbose "Session Object has been created successfully"
                 Write-Verbose "Importing Created Session"
-                Import-Module (Import-PSSession $PSSession -AllowClobber -ErrorAction SilentlyContinue) -Global -ErrorAction Stop
-                Write-Verbose "Session has been imported successfully"
-                Write-Verbose "Now you are connected to ExchangeOnlieShell"
-                $Domain=Get-AcceptedDomain | Where {$_.Default -eq $true} | select -ExpandProperty DomainName -ErrorAction SilentlyContinue
-                UpdateImplicitRemotingHandler
+                try{
+                    Import-Module (Import-PSSession $PSSession -AllowClobber -ErrorAction SilentlyContinue) -Global -ErrorAction Stop -ErrorVariable $ImportSessionObjectError
+                    Write-Verbose "Session has been imported successfully"
+                    Write-Verbose "Now you are connected to ExchangeOnlieShell"
+                    $Domain=Get-AcceptedDomain | Where {$_.Default -eq $true} | select -ExpandProperty DomainName -ErrorAction SilentlyContinue
+                    $PSSession.Name="EOShell - $Domain"
+                    $props=@{
+                        SessionID=$($PSSession.Id)
+                        Name="EOShell - $Domain"
+                        ComputerName=$PSSession.ComputerName
+                        EOPrimaryDomain=$Domain
+                        DateCreated=$(get-date -Format "MM/dd/yyyy HH:mm:ss")
+                    }
+                    $EOSession=New-Object -TypeName psobject -Property $props
+                    if($global:EOShellEstablishedSession){
+                        $global:EOShellEstablishedSession.Add($EOSession) | Out-Null
+                    }else{
+                        $global:EOShellEstablishedSession=New-Object System.Collections.ArrayList
+                        $global:EOShellEstablishedSession.Add($EOSession) | Out-Null
+                    }
+                    Write-Verbose $PSSession
+                    $EOSession |Select-Object SessionID,Name,ComputerName,EOPrimaryDomain,DateCreated
+                    UpdateImplicitRemotingHandler
+                }catch{
+                    Write-Error "Catched Exception: $($_.exception.message)"
+                }
+                
             }
        }
     }
@@ -239,15 +272,89 @@ function Disconnect-ExchangeOnlineShell
     [Alias('deos','Kill-ExchangeOnlineShellSession','Kill-EOShellSession','Disconnect-EOShell')]
     Param
     (
+        #Used to Specify Domain Name for Session You want to close
+        [Alias('')]
+        $DomainName,
+        
+        #Used to Specify SessionID You want to close
+        [Alias('ID')]
+        $SessionID
+
+
     )
 
     Begin
     {
+      
     }
     Process
     {
         if ($pscmdlet.ShouldProcess( "Exchange Online Powershell Sessions")){
-            Get-PSSession | Where {$_.ComputerName -eq "outlook.office365.com" -and $_.ConfigurationName -eq "Microsoft.Exchange"} | Remove-PSSession
+            if($DomainName){
+                try{
+                    Write-Verbose "Disconnection Session with Domain Name - $DomainName"
+                    $SessionToClose=$Global:EOShellEstablishedSession | Where-Object {$_.EOPrimaryDomain -eq $DomainName}
+                    Get-PSSession -ID $($SessionToClose.SessionID)| Remove-PSSession
+                    $Global:EOShellEstablishedSession.Remove($SessionToClose)
+                }catch{
+                    Write-Error "Catched Exception: $($_.exception.message)"    
+                }
+            }elseif($SessionID){
+                try{
+                    Write-Verbose "Disconnection Session with SessionID - $SessionID"
+                    $SessionToClose=($Global:EOShellEstablishedSession | Where-Object {$_.SessionID -eq $SessionID})
+                    Get-PSSession -ID $($SessionToClose.SessionID)| Remove-PSSession
+                    $Global:EOShellEstablishedSession.Remove($SessionToClose)
+                }catch{
+                    Write-Error "Catched Exception: $($_.exception.message)"    
+                }
+            }else{
+                
+                 if($($Global:EOShellEstablishedSession.Count) -eq 1){
+                        Write-Host "There is $($Global:EOShellEstablishedSession.Count) Exchange Online Sessions:"
+                        Show-EOShellSession
+                        Get-PSSession -ID $($Global:EOShellEstablishedSession.SessionID)| Remove-PSSession
+                        $Global:EOShellEstablishedSession.Remove($Global:EOShellEstablishedSession[0])
+                    }else{
+                        Write-Host "There are $($Global:EOShellEstablishedSession.Count) Exchange Online Sessions:"
+                        Show-EOShellSession
+                        Write-Host ""
+                        Write-Host "Please enter SessionID or DomainName to close individual session. Please enter 'All' to close all available sessions."
+                        $SessionInput=Read-Host "SessionID or DomainName"
+                        if($SessionInput -eq "All" -or $SessionInput -eq "ALL" -or $SessionInput -eq "all"){
+                            Write-Verbose "Closing All available sessions"
+                            foreach($s in $Global:EOShellEstablishedSession){
+                                Remove-PSSession -Id $($s.SessionID)
+                                $Global:EOShellEstablishedSession.Remove($s)
+                            }
+                            
+                        }else{
+                            if(IsInt -Text $SessionInput){
+                                try{
+                                    Write-Verbose "Closing Session with SessionID - $SessionInput"
+                                    $SessionToClose=$(($Global:EOShellEstablishedSession | Where-Object {$_.SessionID -eq $SessionInput})) 
+                                    Get-PSSession -Id $($SessionToClose.SessionID) | Remove-PSSession
+                                    $Global:EOShellEstablishedSession.Remove($SessionToClose)
+                                }catch{
+                                    Write-Error "Catched Exception: $($_.exception.message)"
+                                }
+                                
+                            }else{
+                                
+                                try{
+                                    Write-Verbose "Closing Session with DomainName - $SessionInput"
+                                    $SessionToClose=$(($Global:EOShellEstablishedSession | Where-Object {$_.DomainName -eq $SessionInput})) 
+                                    Get-PSSession -Id $($SessionToClose.SessionID) | Remove-PSSession 
+                                    $Global:EOShellEstablishedSession.Remove($SessionToClose)
+                                }catch{
+                                    Write-Error "Catched Exception: $($_.exception.message)"
+                                }
+                            
+                            }
+                        }
+                    }
+                
+            }
         }
         
     }
@@ -258,4 +365,99 @@ function Disconnect-ExchangeOnlineShell
         }
     }
 }
+
+
+<#
+.Synopsis
+   Show Established Powershell Sessions to Exchange Online.
+.DESCRIPTION
+   Show All Established Powershell Sessions to Exchange Online.
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+#>
+function Show-EOShellSession
+{
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [Alias('seos')]
+    [OutputType([String])]
+    Param
+    (
+    
+    )
+
+    Begin
+    {
+    }
+    Process
+    {
+        if ($pscmdlet.ShouldProcess("Target", "Operation"))
+        {
+             foreach($s in $Global:EOShellEstablishedSession){
+                    Write-Output $s | Select-Object SessionID,Name,ComputerName,EOPrimaryDomain,DateCreated
+                }
+        }
+    }
+    End
+    {
+    }
+}
+
+
+<#
+.Synopsis
+   Check if entered string is converatble to Integer.
+.DESCRIPTION
+   Check if entered string is converatble to Integer.
+.EXAMPLE
+   PS C:\> IsInt -Text "-1"
+True
+.EXAMPLE
+   PS C:\> Convertable-ToInt -Text "-1qw"
+False
+#>
+function Convertable-ToInt
+{
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    [Alias('IsInt')]
+    [OutputType([String])]
+    Param
+    (
+        # Text to try to convert to int
+        [Parameter(Mandatory=$true, 
+                   ValueFromPipeline=$true,
+                   ValueFromPipelineByPropertyName=$true)]
+        [Alias("Input")] 
+        $Text
+      
+    )
+
+    Begin
+    {
+    }
+    Process
+    {
+        if ($pscmdlet.ShouldProcess("$Text"))
+        {
+            $IsNumber=$false
+            try
+            {
+                $IntText=[int]$Text
+                $IsNumber=$true
+
+            }
+            catch
+            {
+                $IsNumber=$false
+            }
+            $IsNumber       
+        }
+    }
+    End
+    {
+    }
+}
+
+
 
