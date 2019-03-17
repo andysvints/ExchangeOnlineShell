@@ -6,12 +6,12 @@ Copy and Paste the following command to install this package using PowerShellGet
 ```powershell
 Install-Module -Name O365SecurityAndComplianceShell 
 ```
-# Cmdlets
+## Cmdlets
 ```powershell
 Connect-ExchangeOnlineShell 
 Disconnect-ExchangeOnlineShell 
 Show-EOShellSession
 ```
 
-# Dependencies
+## Dependencies
 This module has no dependencies.
