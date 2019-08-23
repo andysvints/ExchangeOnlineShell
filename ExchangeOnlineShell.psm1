@@ -112,7 +112,18 @@ function  global:RemoveBrokenOrClosedPSSession()
    Connecting to Exchange Online Shell directly
 .EXAMPLE
     Connect-ExchangeOnlineShell -RenameConsoleWindow
-    Connecting to Exchange Online Shell and renaming console windows to Exchange Mangement Shell: <DefaultDomain>.
+    Connecting to Exchange Online Shell and renaming console windows to "Exchange Mangement Shell: <DefaultDomain>".
+.EXAMPLE
+    Connect-ExchangeOnlineShell -IdleSessionTimeout Max
+    
+    SessionID       : 3
+    Name            : EOShell - domain.com
+    ComputerName    : outlook.office365.com
+    EOPrimaryDomain : domain.com
+    IdleTimeout     : 43200000
+    DateCreated     : 08/23/2019 10:54:37
+    
+    Connecting to Exchange Online Shell and setting Session Timeout to Maximum value - 12 hours.
 #>
 function Connect-ExchangeOnlineShell
 {
@@ -133,7 +144,13 @@ function Connect-ExchangeOnlineShell
 
         # Used to request a new URI when connecting to EXO
         [Alias('SetEmail')]
-        [string]$EmailAddress
+        [string]$EmailAddress,
+
+         #Used to set custom IdleSessionTimeout in miliseconds. Default value 15 mins(900000 miliseconds), max value is 12 hours(43200000)
+        [ValidatePattern({^[900000-43200000]|max*$})]
+        [Alias('SessionTimeout','Timeout')]
+        $IdleSessionTimeout=900000
+
     )
 
     Begin
@@ -146,6 +163,9 @@ function Connect-ExchangeOnlineShell
         
         $global:Credential = $Credential;
         $ProxyUsed=$false
+        if($IdleSessionTimeout -eq "Max"){
+            $IdleSessionTimeout=43200000
+        }
         if(!$SkipProxyCheck){
             
             Write-Verbose "Checking Proxy Settings on computer it might take some time. Please be patient"
@@ -189,7 +209,7 @@ function Connect-ExchangeOnlineShell
             $ExchangeOnlineSessionObjectError=$false
             if($ProxyUsed){
                 Write-Verbose "Proxy Server is used: Importing Proxy Settings from IE"
-                $proxySettings = New-PSSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic
+                $proxySettings = New-PSSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic -IdleTimeout $IdleSessionTimeout
                 $global:PSSessionOption = $proxySettings;
                 Write-Verbose "Creating Session Object using $($Credential.UserName) credentials"
                 
@@ -205,7 +225,8 @@ function Connect-ExchangeOnlineShell
                 
                 
                 try{
-                    $PSSession=New-ExoPSSession -UserPrincipalName $($Credential.UserName) -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri  -Credential $Credential
+                    $SessionSettings = New-PSSessionOption -IdleTimeout $IdleSessionTimeout
+                    $PSSession=New-ExoPSSession -UserPrincipalName $($Credential.UserName) -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri  -Credential $Credential -PSSessionOption $SessionSettings
                 }catch{
                     $ExchangeOnlineSessionObjectError=$true
                     Write-Error "Catched Exception: $($_.exception.message)"
@@ -230,6 +251,7 @@ function Connect-ExchangeOnlineShell
                         ComputerName=$PSSession.ComputerName
                         EOPrimaryDomain=$Domain
                         DateCreated=$(get-date -Format "MM/dd/yyyy HH:mm:ss")
+                        IdleTimeout=$($PSSession.IdleTimeout)
                     }
                     $EOSession=New-Object -TypeName psobject -Property $props
                     if($global:EOShellEstablishedSession){
@@ -239,7 +261,7 @@ function Connect-ExchangeOnlineShell
                         $global:EOShellEstablishedSession.Add($EOSession) | Out-Null
                     }
                     Write-Verbose $PSSession
-                    $EOSession |Select-Object SessionID,Name,ComputerName,EOPrimaryDomain,DateCreated
+                    $EOSession |Select-Object SessionID,Name,ComputerName,EOPrimaryDomain,IdleTimeout,DateCreated
                     UpdateImplicitRemotingHandler
                 }catch{
                     Write-Error "Catched Exception: $($_.exception.message)"
@@ -265,6 +287,17 @@ function Connect-ExchangeOnlineShell
    Gets all the Sessions with Microsoft.Exchange Configuration established to outlook.office365.com and removes them. 
 .EXAMPLE
     Disconnect-ExchangeOnlineShell
+.EXAMPLE
+    Disconnect-ExchangeOnlineShell
+
+    There is 1 Exchange Online Sessions:
+
+    SessionID       : 3
+    Name            : EOShell - exelegent.com
+    ComputerName    : outlook.office365.com
+    EOPrimaryDomain : exelegent.com
+    IdleTimeout     : 43200000
+    DateCreated     : 08/23/2019 10:54:37
 #>
 function Disconnect-ExchangeOnlineShell
 {
@@ -373,9 +406,17 @@ function Disconnect-ExchangeOnlineShell
 .DESCRIPTION
    Show All Established Powershell Sessions to Exchange Online.
 .EXAMPLE
-   Example of how to use this cmdlet
-.EXAMPLE
-   Another example of how to use this cmdlet
+   Show-EOShellSession
+   
+    SessionID       : 3
+    Name            : EOShell - primarydomain.com
+    ComputerName    : outlook.office365.com
+    EOPrimaryDomain : primarydomain.com
+    IdleTimeout     : 43200000
+    DateCreated     : 08/23/2019 10:54:37
+    
+    Showing established sessions to ExchangeOnlineShell.
+
 #>
 function Show-EOShellSession
 {
@@ -395,7 +436,7 @@ function Show-EOShellSession
         if ($pscmdlet.ShouldProcess("Target", "Operation"))
         {
              foreach($s in $Global:EOShellEstablishedSession){
-                    Write-Output $s | Select-Object SessionID,Name,ComputerName,EOPrimaryDomain,DateCreated
+                    Write-Output $s | Select-Object SessionID,Name,ComputerName,EOPrimaryDomain,IdleTimeout,DateCreated
                 }
         }
     }
