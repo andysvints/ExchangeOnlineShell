@@ -1,4 +1,5 @@
-﻿<#
+﻿
+<#
 .Synopsis Override Get-PSImplicitRemotingSession function for reconnection
 #>
 function global:UpdateImplicitRemotingHandler()
