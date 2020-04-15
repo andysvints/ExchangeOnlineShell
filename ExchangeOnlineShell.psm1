@@ -1,5 +1,4 @@
-﻿
-<#
+﻿<#
 .Synopsis Override Get-PSImplicitRemotingSession function for reconnection
 #>
 function global:UpdateImplicitRemotingHandler()
@@ -150,13 +149,24 @@ function Connect-ExchangeOnlineShell
          #Used to set custom IdleSessionTimeout in miliseconds. Default value 15 mins(900000 miliseconds), max value is 12 hours(43200000)
         [ValidatePattern({^[900000-43200000]|max*$})]
         [Alias('SessionTimeout','Timeout')]
-        $IdleSessionTimeout=900000
+        $IdleSessionTimeout=900000,
+
+        #Used to connect to Government Cloud 
+        [Alias('GCCHigh','Gov','GCCH')]
+        [Switch]$GovernmentCloud
 
     )
 
     Begin
     {
-        $ConnectionUri="https://outlook.office365.com/powershell-liveid/?email=$EmailAddress"
+        if ($GCCH)
+        {
+            $DomainSuffix="us"
+        }else{
+            $DomainSuffix="com"
+        }
+
+        $ConnectionUri="https://outlook.office365.$DomainSuffix/powershell-liveid/?email=$EmailAddress"
         $AzureADAuthorizationEndpointUri="https://login.windows.net/common"
         $global:ConnectionUri = $ConnectionUri;
         $global:AzureADAuthorizationEndpointUri = $AzureADAuthorizationEndpointUri;
