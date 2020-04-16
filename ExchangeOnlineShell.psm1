@@ -159,14 +159,16 @@ function Connect-ExchangeOnlineShell
 
     Begin
     {
-        if ($GCCH)
+        if ($GovernmentCloud)
         {
+            Write-Verbose "Government Cloud"
             $DomainSuffix="us"
         }else{
             $DomainSuffix="com"
         }
 
         $ConnectionUri="https://outlook.office365.$DomainSuffix/powershell-liveid/?email=$EmailAddress"
+        Write-Verbose "ConnectionUri: $ConnectionUri"
         $AzureADAuthorizationEndpointUri="https://login.windows.net/common"
         $global:ConnectionUri = $ConnectionUri;
         $global:AzureADAuthorizationEndpointUri = $AzureADAuthorizationEndpointUri;
