@@ -188,7 +188,7 @@ function Connect-ExchangeOnlineShell
             if($Proxy.ProxyEnable){
                 Write-Verbose "Proxy Settings have been detected"
                 $ProxyUsed=$true
-                break
+                
             }else{
                 Write-Verbose "No Proxy Settings detected"
                 $ProxyUsed=$false
