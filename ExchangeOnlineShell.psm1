@@ -188,27 +188,28 @@ function Connect-ExchangeOnlineShell
             if($Proxy.ProxyEnable){
                 Write-Verbose "Proxy Settings have been detected"
                 $ProxyUsed=$true
-                break
+                
             }else{
                 Write-Verbose "No Proxy Settings detected"
                 $ProxyUsed=$false
             }
-
-            Write-Verbose "Proxy Setings Check 2 of 2: Transparent Proxy Check"
-            Write-Verbose "If you have a transparent proxy, your computer will not provide any info about it"
-            Write-Verbose "Trying to connect to outlook.office365.com via port 443 directly"
-            $TCPobj=New-Object System.Net.Sockets.TCPClient
-            $Connect=$TCPobj.BeginConnect("outlook.office365.com",443,$null,$null)
-            $wait=$Connect.AsyncWaitHandle.WaitOne(2000,$false)
-            if(!$wait){
-                Write-Verbose "Connection could not be established : TimeOut has been reached"
-                Write-Verbose "Most likely your computer is using Transparent Proxy"
-                $ProxyUsed=$true
-            }else{
-                $TCPobj.EndConnect($Connect) | out-Null 
-                Write-Verbose "Connection has been established successfully"
-                Write-Verbose "No Transparent Proxy settings detected"
-                $ProxyUsed=$false
+            if(!$ProxyUsed){
+                Write-Verbose "Proxy Setings Check 2 of 2: Transparent Proxy Check"
+                Write-Verbose "If you have a transparent proxy, your computer will not provide any info about it"
+                Write-Verbose "Trying to connect to outlook.office365.com via port 443 directly"
+                $TCPobj=New-Object System.Net.Sockets.TCPClient
+                $Connect=$TCPobj.BeginConnect("outlook.office365.com",443,$null,$null)
+                $wait=$Connect.AsyncWaitHandle.WaitOne(2000,$false)
+                if(!$wait){
+                    Write-Verbose "Connection could not be established : TimeOut has been reached"
+                    Write-Verbose "Most likely your computer is using Transparent Proxy"
+                    $ProxyUsed=$true
+                }else{
+                    $TCPobj.EndConnect($Connect) | out-Null 
+                    Write-Verbose "Connection has been established successfully"
+                    Write-Verbose "No Transparent Proxy settings detected"
+                    $ProxyUsed=$false
+                }
             }
             
         }else{
